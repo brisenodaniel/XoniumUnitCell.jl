@@ -3,9 +3,11 @@ const Qsys = AbstractQuantumSystem
 const QuantumSystem = AbstractQuantumSystem
 const StateIndex = Union{Int, AbstractVector{<:Int}, Symbol}
 const Maybe{T} = Union{T, Nothing} where T
-
 const _STATE_SYMBOLS = (; g=0, e=1, f=2, h=3)
 
+export AbstractQuantumSystem, Qsys, QuantumSystem, StateIndex, Maybe
+export SimpleQuantumSystem, CompositeQuantumSystem, Qsys, tensor_dims
+export state, energy, to_energy_basis, truncate, I
 
 struct SimpleQuantumSystem{
     Ops<:NamedTuple,
@@ -227,7 +229,6 @@ function _check_subsys(subsys::NamedTuple)
     end
     return isnothing(msg) ? msg : ArgumentError(msg)
 end
-
 
 function _state_index(lbl::StateIndex)
     if lbl isa Int
@@ -475,6 +476,10 @@ function truncate_Qobj(q::AbstractQuantumObject, N::Int)
     return QuantumObject(q.data[1:N, 1:N], q.type, (N,))
 end
 
+@memoize LRU{Any, Any}(maxsize=100) function QuantumToolbox.eigenstates(sys::AbstractQuantumSystem)
+    eigenstates(sys.H)
+end
+
 @doc raw"""
     `state(sys::SimpleQuantumSystem, lbl::StateIndex)`
 Given a fock-space eigenstate label, returns the corresponding
@@ -503,7 +508,6 @@ function state(sys::SimpleQuantumSystem, lbl::StateIndex)
     idx = idx[1] + 1
     return λ[idx], ψ[idx]
 end
-
 
 @doc raw"""
     ``state(sys::CompositeQuantumSystem, lbl::StateIndex)
@@ -544,7 +548,7 @@ function state(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=false)
     if bare
         return _bare_state(sys, idx)
     end
-    λ, ψ, _ = eigenstates(sys.H)
+    λ, ψ, _ = eigenstates(sys)
     if length(idx) == 1
         idx = idx[1]
         return λ[idx], ψ[idx]
@@ -572,6 +576,9 @@ function _bare_state(sys::CompositeQuantumSystem, lbl::AbstractVector{<:Int})
         return λ, U'*ψ
     end
 end
+
+energy(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=false) = state(sys, lbl, bare)[1]
+energy(sys::SimpleQuantumSystem, lbl::StateIndex) = state(sys, lbl)[1]
 
 ## Infix Operators #######################
 
