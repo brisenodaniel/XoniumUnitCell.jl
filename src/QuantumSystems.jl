@@ -3,11 +3,11 @@ const Qsys = AbstractQuantumSystem
 const QuantumSystem = AbstractQuantumSystem
 const StateIndex = Union{Int, AbstractVector{<:Int}, Symbol}
 const Maybe{T} = Union{T, Nothing} where T
-const _STATE_SYMBOLS = (; g=0, e=1, f=2, h=3)
+const _STATE_SYMBOLS = (; g=1, e=2, f=3, h=4) # Julia indexing
 
 export AbstractQuantumSystem, Qsys, QuantumSystem, StateIndex, Maybe
 export SimpleQuantumSystem, CompositeQuantumSystem, Qsys, tensor_dims
-export state, energy, to_energy_basis, truncate, I
+export state, energy, to_energy_basis, truncate_sys, I, state_idx
 
 struct SimpleQuantumSystem{
     Ops<:NamedTuple,
@@ -41,6 +41,7 @@ struct CompositeQuantumSystem{
     U_basis :: Maybe{AbstractQuantumObject}
     dressed_dim :: Maybe{Int}
     name :: Maybe{Symbol}
+    state_lookup::AbstractArray{Union{Int64, Missing}}
 
     function CompositeQuantumSystem(
         subsys::Systms,
@@ -57,7 +58,10 @@ struct CompositeQuantumSystem{
         err = _check_subsys(subsys)
         err = isnothing(err) ? _check_ops(ops) : err
         isnothing(err) ? nothing : throw(err)
-        return new{Ops, Systms, PT}(subsys, ops, params, U_basis, dressed_dim, name)
+        n_sys = length(subsys)
+        tdims = (size(sys.H)[1] for (_, sys) in pairs(subsys)) |> collect
+        state_lookup = Array{Union{Int64, Missing}, n_sys}(missing, tdims...)
+        return new{Ops, Systms, PT}(subsys, ops, params, U_basis, dressed_dim, name, state_lookup)
     end
 end
 
@@ -230,18 +234,20 @@ function _check_subsys(subsys::NamedTuple)
     return isnothing(msg) ? msg : ArgumentError(msg)
 end
 
-function _state_index(lbl::StateIndex)
+function _state_index(lbl::StateIndex, sys::AbstractQuantumSystem)
     if lbl isa Int
-        return [lbl,]
+        idx = [lbl + 1,]
     elseif lbl isa AbstractVector{<:Int}
-        return lbl
+        idx = lbl .+ 1
     else
         _lbl = (collect ∘ String)(lbl)
-        return map(_lbl) do l_n
+        idx =  map(_lbl) do l_n
             l_n = Symbol(l_n)
-            _STATE_SYMBOLS[l_n]
+            return _STATE_SYMBOLS[l_n]
         end
     end
+    _check_idx(idx, sys)
+    return idx
 end
 
 function _check_idx(lbl::AbstractVector{<:Int}, sys::AbstractQuantumSystem)
@@ -364,7 +370,7 @@ end
 
 function to_energy_basis(
     sys::SimpleQuantumSystem;
-    set_energy_zero::Union{Bool, Float64}=false,
+    set_energy_zero::Union{Bool, Float64}=true,
     etol::Union{Bool, Float64}=false)
     λ, _, U = eigenstates(sys.H)
     U = Qobj(U, dims=sys.H.dims)
@@ -387,7 +393,7 @@ end
 
 function to_energy_basis(
     sys::CompositeQuantumSystem;
-    set_energy_zero::Union{Bool, Float64} = false,
+    set_energy_zero::Union{Bool, Float64} = true,
     etol::Union{Bool, Float64} = false,
 )
     # --- 1. Diagonalize composite Hamiltonian ---
@@ -397,7 +403,7 @@ function to_energy_basis(
     Uq = QuantumObject(U, sys.H.type, sys.H.dims)
 
     # --- 2. Similarity transform of Hamiltonian ---
-    H_diag = Uq * sys.H * Uq'
+    H_diag = Uq' * sys.H * Uq
 
     # --- 3. Optional energy shift ---
     if set_energy_zero !== false
@@ -428,7 +434,7 @@ function to_energy_basis(
     end
 end
 
-function truncate(sys::SimpleQuantumSystem, N::Int)
+function truncate_sys(sys::SimpleQuantumSystem, N::Int)
     new_ops = (;(k => truncate_Qobj(op, N) for (k, op) in pairs(sys.ops))...)
     return SimpleQuantumSystem(new_ops; params=sys.params, name=sys.name)
 end
@@ -496,16 +502,14 @@ eigenstate of the system Hamiltonian.
 - If `lbl` is a Symbol, it must be a single character in the set ``\{g, e, f, h\}``, which will
   correspond to the state indices ``(0,1,2,3)``.
 - If `lbl` is a symbol outside of the allowed set, more than a single character, or an integer not in
-  the interval `[0, size(sys.H[1]))`, the function will throw an `ArgumentError`
+.  the interval `[0, size(sys.H[1]))`, the function will throw an `ArgumentError`
 
 # Returns:
 - The eigenstate of `sys.H` corresponding to the state label `lbl`.
  """
 function state(sys::SimpleQuantumSystem, lbl::StateIndex)
     λ, ψ, _ = eigenstates(sys.H)
-    idx = _state_index(lbl)
-    _check_idx(idx, sys)
-    idx = idx[1] + 1
+    idx = _state_index(lbl, sys)[1]
     return λ[idx], ψ[idx]
 end
 
@@ -543,30 +547,27 @@ of the system Hamiltonian.
 - The dressed or bare eigenenergy and eigenstate pair ``(\lambda, \psi)`` of `sys` specified by `lbl`.
 """
 function state(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=false)
-    idx = _state_index(lbl)
-    _check_idx(idx, sys)
     if bare
+        idx = _state_index(lbl, sys)
         return _bare_state(sys, idx)
-    end
-    λ, ψ, _ = eigenstates(sys)
-    if length(idx) == 1
-        idx = idx[1]
-        return λ[idx], ψ[idx]
     else
-        _, ψ_bare = _bare_state(sys, idx)
-        # choose eigenstate based off most overlap with bare state
-        best_idx = abs.(ψ_bare'*ψ_n for ψ_n in ψ) |> argmax
-        return λ[best_idx], ψ[best_idx]
+        idx = state_idx(sys, lbl)
+        λ, ψ, _ = eigenstates(sys.H)
+        return λ[idx], ψ[idx]
     end
 end
 
-function _bare_state(sys::CompositeQuantumSystem, lbl::AbstractVector{<:Int})
-    length(lbl) == 1 && throw(ArgumentError(
-        "`lbl` can not have length 1 when `bare==true`"
-    ))
-    #########ens_states = state.(collect(sys.subsys), Ref(lbl))
-    ens_states = map(sys.subsys, lbl) do sub, l_n
-        state(sub, l_n)
+function _bare_state(sys::CompositeQuantumSystem, idx::AbstractVector{<:Int})
+
+    if length(idx) == 1
+        i = idx[1]
+        H = tensor((sub.H for sub in sys.subsys)...)
+        λ, ψ, _ = eigenstates(H)
+        return λ[i], ψ[i]
+    end
+    ens_states = map(sys.subsys, idx) do sub, i
+        λ_sub, ψ_sub, _ = eigenstates(sub.H)
+        return λ_sub[i], ψ_sub[i]
     end
     λ, ψ = first.(ens_states) |> prod, last.(ens_states) |> x -> tensor(x...)
     U = sys.U_basis
@@ -574,6 +575,24 @@ function _bare_state(sys::CompositeQuantumSystem, lbl::AbstractVector{<:Int})
         return λ, ψ
     else
         return λ, U'*ψ
+    end
+end
+
+function state_idx(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=false)
+    idx = _state_index(lbl, sys)
+    if length(idx) == 1
+        return idx[1]
+    elseif !bare && !ismissing(sys.state_lookup[idx...])
+        return sys.state_lookup[idx...]
+    else
+        H = bare ? tensor((sub.H for sub in sys.subsys)...) : sys.H
+        _, ψ, _ = eigenstates(H)
+        _, ψbare = _bare_state(sys, idx)
+        best_idx = abs.(ψbare' * ψn for ψn in ψ) |> argmax
+        if !bare
+            sys.state_lookup[idx...] = best_idx
+        end
+        return best_idx
     end
 end
 
@@ -598,7 +617,7 @@ function QuantumToolbox.:⊗(A::SimpleQuantumSystem, B::SimpleQuantumSystem)
     subsys = (; nameA => A, nameB => B)
 
     # --- 3. Build composite Hamiltonian ---
-    H = tensor(A.H, B.H)
+    H = tensor(A.H, qeye(B)) + tensor(qeye(A), B.H)
 
     ops = (; H = H)
 
@@ -621,7 +640,7 @@ function QuantumToolbox.:⊗(A::SimpleQuantumSystem, B::CompositeQuantumSystem)
     subsys = (; nameA => A, B.subsys...)
 
     # Hamiltonian
-    H = tensor(A.H, B.H)
+    H = tensor(A.H, qeye(B)) + tensor(qeye(A), B.H)
 
     ops = (; H = H)
 
@@ -641,7 +660,7 @@ function QuantumToolbox.:⊗(A::CompositeQuantumSystem, B::SimpleQuantumSystem)
 
     subsys = (; A.subsys..., nameB => B)
 
-    H = tensor(A.H, B.H)
+    H = tensor(A.H, qeye(B)) + tensor(qeye(A), B.H)
 
     ops = (; H = H)
 
@@ -664,7 +683,7 @@ function QuantumToolbox.:⊗(A::CompositeQuantumSystem, B::CompositeQuantumSyste
 
     subsys = (; A.subsys..., B.subsys...)
 
-    H = tensor(A.H, B.H)
+    H = tensor(A.H, qeye(B)) + tensor(qeye(A), B.H)
 
     ops = (; H = H)
 
@@ -744,3 +763,5 @@ end
 
 Base.:+(ops::NamedTuple, sys::AbstractQuantumSystem) = sys + ops
 Base.:+(Op::AbstractQuantumObject, sys::AbstractQuantumSystem) = sys + Op
+
+Base.:-(sys::AbstractQuantumSystem, Op::AbstractQuantumObject) = sys +(-1*Op)

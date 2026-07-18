@@ -8,7 +8,7 @@ function zz_heatmap_figure(
     xlabel = L"J_{12}\ (\mathrm{MHz})",
     ylabel = L"J_c\ (\mathrm{MHz})",
     title = "",
-    colorbar_label = L"\zeta\ (\mathrm{kHz})",
+    colorbar_label = L"\zeta\ (\mathrm{GHz})",
     colormap = Reverse(:Blues),
     clims = (1e-2, 1e2),          # kHz range
     dashed_curve = nothing,      # (x_curve, y_curve)
@@ -41,8 +41,8 @@ function zz_heatmap_figure(
         fig[1, 2],
         hm;
         label = colorbar_label,
-        ticks = ([1e-2, 1e-1, 1e0, 1e1, 1e2],
-                 ["10⁻²", "10⁻¹", "10⁰", "10¹", "10²"]),
+      #  ticks = ([1e-2, 1e-1, 1e0, 1e1, 1e2],
+      #           ["10⁻²", "10⁻¹", "10⁰", "10¹", "10²"]),
     )
 
     # --- Dashed minimum-ZZ curve ---
@@ -83,13 +83,6 @@ function zz_heatmap_figure(
         )
     end
 
-    # --- Extra annotation ---
-    text!(
-        ax,
-        "No coupler";
-        position = (maximum(x) * 0.6, minimum(y) + 40),
-        color = :gray,
-    )
 
     return fig, ax
 end
