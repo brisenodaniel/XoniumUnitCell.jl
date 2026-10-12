@@ -1,7 +1,12 @@
 export φn_operators, fluxonium, transmon, split_transmon, transmon_nbasis
 export tounit_ħ, tounit_h
 
-function φn_operators(;EC::Real, EJ::Maybe{Real}=nothing, EL::Maybe{Real}=nothing, nlev::Int=10)
+function φn_operators(
+    ;EC::Real,
+    EJ::Maybe{Real}=nothing,
+    EL::Maybe{Real}=nothing,
+    nlev::Int=10
+    )
     isnothing(EJ) && isnothing(EL) && throw(
         ArgumentError("No potential term. Both `EJ` and `EL` cannot be `nothing`.")
     )
@@ -27,16 +32,15 @@ function fluxonium(;
                    EC::Real,
                    EL::Real,
                    EJ::Real,
-                   δϕ::Real = 0.0,
+                   δϕ::Real = π,
                    n_g::Real=0.0,
                    nlev::Int=40,
                    Φext_incos::Bool=false,
                    name::Symbol=:Fluxonium)
     φ, n = φn_operators(;EC=EC, EL=EL, nlev=nlev)
-    Φ = π - δϕ
-    Φ_lin, Φ_cos = Φext_incos ? (0.0 , Φ) : (Φ, 0.0)
+    Φ_lin, Φ_cos = Φext_incos ? (0.0 , δϕ) : (δϕ, 0.0)
     H = 4.0 * EC * (n-n_g)^2 + # Capacitive Energy
-        (1.0/2.0) * EL * (φ - Φ_lin)^2 - # Linear inductor energy
+        (1.0/2.0) * EL * (φ + Φ_lin)^2 - # Linear inductor energy
         EJ * cos(φ - Φ_cos) # JJ energy
     ops = (;φ=φ, n=n, H=H,)
     params = (;EC=EC, EL=EL, EJ=EJ, δϕ=δϕ, Φext_incos=Φext_incos)

@@ -123,4 +123,22 @@
         @test dressed[:B, :φ] ≈ φB_manual
     end
 
+
+    @testset "bare_to_dressed_tracking" begin
+        AB = A ⊗ B
+        @test state(AB, :gg; bare_to_dressed_tracking=:spectrum)[1] ≈ first(eigenstates(AB.H))[1]
+        @test state(AB, :ge) == state(AB, :ge; bare_to_dressed_tracking=:spectrum)
+        @test state_idx(AB, :ge; bare_to_dressed_tracking=:overlap) isa Int
+        # weakly coupled: both modes agree on low-lying states
+        for lbl in (:gg, :ge, :eg, :ee)
+            @test state_idx(AB, lbl; bare_to_dressed_tracking=:overlap) == state_idx(AB, lbl)
+        end
+        # spectrum rank matches bare energy ordering
+        λd = first(eigenstates(AB.H))
+        @test energy(AB, :ee; bare_to_dressed_tracking=:spectrum) ≈
+              λd[state_idx(AB, :ee; bare_to_dressed_tracking=:spectrum)]
+        @test_throws ArgumentError state(AB, :gg; bare_to_dressed_tracking=:bogus)
+        @test state(A, :e; bare_to_dressed_tracking=:spectrum) == state(A, :e)
+        @test_throws ArgumentError state(A, :e; bare_to_dressed_tracking=:bogus)
+    end
 end

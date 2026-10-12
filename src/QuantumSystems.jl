@@ -256,9 +256,10 @@ function _check_idx(lbl::AbstractVector{<:Int}, sys::AbstractQuantumSystem)
         "Number of characters or integers in `lbl` must match number of subsystems in `sys`"
     ))
     idx_checks = map(lbl, tdims) do l_n, t_n
-        l_n ∉ 0:(t_n-1)
+        l_n ∉ 1:t_n
     end
-    return (isempty ∘ findall)(idx_checks) || throw(ArgumentError(
+    bad_idx = findall(idx_checks)
+    return isempty(bad_idx) || throw(ArgumentError(
         "State indices at `lbl` indices $bad_idx lie outside of the range allowed  " *
             "by the Hilbert space dimension of their subsystem "
     ))
@@ -304,7 +305,7 @@ end
 
 function tensor_dims(sys::AbstractQuantumSystem)
     if sys isa SimpleQuantumSystem
-        return collect(sys.H.dims[1])
+        return collect(sys.H.dims)
     else
         return ((tensor_dims(subsys)[1] for subsys in sys.subsys)...,)
     end
@@ -370,7 +371,7 @@ end
 
 function to_energy_basis(
     sys::SimpleQuantumSystem;
-    set_energy_zero::Union{Bool, Float64}=true,
+    set_energy_zero::Union{Bool, Float64}=false,
     etol::Union{Bool, Float64}=false)
     λ, _, U = eigenstates(sys.H)
     U = Qobj(U, dims=sys.H.dims)
@@ -495,6 +496,9 @@ eigenstate of the system Hamiltonian.
 - `sys`: Simple QuantumSystem for which to return the Hamiltonian eigenstate
 - `lbl`: The state label of the desired system eigenstate. Must be a positive integer, a symbol,
          or a vector of Ints of length 1.
+- `bare_to_dressed_tracking`: Either `:overlap` or `:spectrum` (default). Accepted for API symmetry with
+         `CompositeQuantumSystem` and validated, but otherwise ignored since the eigenstates of a
+         simple system are already energy-ordered.
 
 # Notes:
 - If `lbl` is a positive integer `n`, then the function will return the `nth` eigenstate of the
@@ -507,7 +511,8 @@ eigenstate of the system Hamiltonian.
 # Returns:
 - The eigenstate of `sys.H` corresponding to the state label `lbl`.
  """
-function state(sys::SimpleQuantumSystem, lbl::StateIndex)
+function state(sys::SimpleQuantumSystem, lbl::StateIndex; bare_to_dressed_tracking::Symbol=:spectrum)
+    _check_tracking(bare_to_dressed_tracking)
     λ, ψ, _ = eigenstates(sys.H)
     idx = _state_index(lbl, sys)[1]
     return λ[idx], ψ[idx]
@@ -521,8 +526,17 @@ of the system Hamiltonian.
 
 # Arguments
 - `sys`: CompositeQuantumSystem for which to return the Hamiltonian eigenstate.
-- `lbl`: The state label ofthe desired system eigenstate. - `bare`: Boolean flag which sets whether to return the eigenstate in the bare product
+- `lbl`: The state label of the desired system eigenstate.
+- `bare`: Boolean flag which sets whether to return the eigenstate in the bare product
           basis or the dressed eigenbasis of `sys.H`.
+- `bare_to_dressed_tracking`: Keyword, either `:overlap` or `:spectrum` (default). Only used when
+          `bare==false` and `lbl` is a multi-subsystem label.
+        - `:overlap`: the dressed eigenstate with maximal overlap with the bare product state.
+        - `:spectrum`: the dressed eigenstate whose energy rank equals the energy rank of the
+          bare product state in the bare spectrum (e.g. if `:ge` is the 2nd excited bare state,
+          the 2nd excited eigenstate of `sys.H` is returned). Degenerate bare levels are ordered
+          by label order (first subsystem index varies fastest), so the result is somewhat
+          arbitrary for them; prefer `:overlap` there.
 
 # Notes
 - For a `sys` with `N` subsystems, `lbl` must be a positive integer, a Symbol of `N` characters,
@@ -546,15 +560,28 @@ of the system Hamiltonian.
 # Returns
 - The dressed or bare eigenenergy and eigenstate pair ``(\lambda, \psi)`` of `sys` specified by `lbl`.
 """
-function state(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=false)
+function state(
+    sys::CompositeQuantumSystem,
+    lbl::StateIndex,
+    bare::Bool=false;
+    bare_to_dressed_tracking::Symbol=:spectrum,
+)
+    _check_tracking(bare_to_dressed_tracking)
     if bare
         idx = _state_index(lbl, sys)
         return _bare_state(sys, idx)
     else
-        idx = state_idx(sys, lbl)
+        idx = state_idx(sys, lbl; bare_to_dressed_tracking)
         λ, ψ, _ = eigenstates(sys.H)
         return λ[idx], ψ[idx]
     end
+end
+
+function _check_tracking(mode::Symbol)
+    mode in (:overlap, :spectrum) || throw(ArgumentError(
+        "`bare_to_dressed_tracking` must be `:overlap` or `:spectrum`, got `:$mode`"
+    ))
+    return mode
 end
 
 function _bare_state(sys::CompositeQuantumSystem, idx::AbstractVector{<:Int})
@@ -578,10 +605,18 @@ function _bare_state(sys::CompositeQuantumSystem, idx::AbstractVector{<:Int})
     end
 end
 
-function state_idx(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=false)
+function state_idx(
+    sys::CompositeQuantumSystem,
+    lbl::StateIndex,
+    bare::Bool=false;
+    bare_to_dressed_tracking::Symbol=:spectrum,
+)
+    _check_tracking(bare_to_dressed_tracking)
     idx = _state_index(lbl, sys)
     if length(idx) == 1
         return idx[1]
+    elseif !bare && bare_to_dressed_tracking == :spectrum
+        return _spectrum_idx(sys, idx)
     elseif !bare && !ismissing(sys.state_lookup[idx...])
         return sys.state_lookup[idx...]
     else
@@ -596,8 +631,20 @@ function state_idx(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=fals
     end
 end
 
-energy(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=false) = state(sys, lbl, bare)[1]
-energy(sys::SimpleQuantumSystem, lbl::StateIndex) = state(sys, lbl)[1]
+# Energy rank of the bare product state `idx` among all bare product states.
+function _spectrum_idx(sys::CompositeQuantumSystem, idx::AbstractVector{<:Int})
+    sub_λ = [real.(first(eigenstates(sub.H))) for sub in sys.subsys]
+    # first subsystem index varies fastest, matching the kron ordering of `tensor`
+    inds = CartesianIndices(Tuple(length.(sub_λ)))
+    energies = [sum(sub_λ[n][I[n]] for n in eachindex(sub_λ)) for I in inds]
+    order = sortperm(vec(energies))  # stable: ties broken by label order
+    target = LinearIndices(inds)[idx...]
+    return findfirst(==(target), order)
+end
+
+energy(sys::CompositeQuantumSystem, lbl::StateIndex, bare::Bool=false; kwargs...) =
+    state(sys, lbl, bare; kwargs...)[1]
+energy(sys::SimpleQuantumSystem, lbl::StateIndex; kwargs...) = state(sys, lbl; kwargs...)[1]
 
 ## Infix Operators #######################
 

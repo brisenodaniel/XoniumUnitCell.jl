@@ -1,5 +1,6 @@
 using Revise
 using Test
+using LinearAlgebra
 using XoniumUnitCell
 
 include("./test_SimpleQuantumSystem.jl")
