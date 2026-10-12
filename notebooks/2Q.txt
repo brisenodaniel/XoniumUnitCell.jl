@@ -1,0 +1,361 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "b0f28c77-8854-452b-8fb1-cbd8699b7dae",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "\u001b[32m\u001b[1m  Activating\u001b[22m\u001b[39m project at `~/Projects/xonium/XoniumUnitCell.jl`\n"
+     ]
+    },
+    {
+     "data": {
+      "text/plain": [
+       "fluxonium (generic function with 1 method)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "using ProjectRoot\n",
+    "using Pkg\n",
+    "\n",
+    "Pkg.activate(@projectroot)\n",
+    "using QuantumToolbox\n",
+    "using Revise\n",
+    "using ProgressMeter\n",
+    "\n",
+    "include(\"../src/XoniumUnitCell.jl\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "40d92df0",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "ζ_zz"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "\"\"\"\n",
+    "    ncell(params::NamedTuple; subsys_nstate=10, diagonalize_subsys=true, set_energy_zero=true, etol=1e-9) -> CompositeQuantumSystem\n",
+    "Construct a composite quantum system representing a unit cell of `fluxonium` qubits, given a `NamedTuple` of parameters for each subsystem.\n",
+    "The function allows for optional diagonalization and truncation of each subsystem.\n",
+    "# Arguments\n",
+    "- `params::NamedTuple`: A `NamedTuple` where each key is a symbol representing a subsystem name, and each value is a `NamedTuple` of\n",
+    "   parameters for the `fluxonium` constructor.\n",
+    "- `subsys_nstate::Int`: The number of states to retain in each subsystem after truncation (default: 10).\n",
+    "- `diagonalize_subsys::Bool`: Whether to diagonalize each subsystem before truncation (default: true).\n",
+    "- `set_energy_zero::Bool`: Whether to set the ground state energy to zero when diagonalizing (default: true).\n",
+    "- `etol::Float64`: The energy tolerance for truncation when diagonalizing (default: 1e-9).\n",
+    "# Returns\n",
+    "- `CompositeQuantumSystem`: A composite quantum system representing the unit cell, with each subsystem constructed according to the \n",
+    "   provided parameters and optionally diagonalized and truncated.\n",
+    "\"\"\"\n",
+    "function ncell(\n",
+    "    params::NamedTuple;\n",
+    "    subsys_nstate=10,\n",
+    "    diagonalize_subsys=true,\n",
+    "    set_energy_zero=true,\n",
+    "    etol=1e-9,)::CompositeQuantumSystem\n",
+    "    return mapreduce(⊗, keys(params), values(params)) do n, p \n",
+    "        fluxonium(;p..., name=n) |>\n",
+    "            sys -> diagonalize_subsys ? to_energy_basis(sys; set_energy_zero, etol) : sys |>\n",
+    "            sys -> truncate(sys, subsys_nstate)\n",
+    "    end\n",
+    "end\n",
+    "\n",
+    "\n",
+    "\"\"\"\n",
+    "    ξ_zz(two_cell::CompositeQuantumSystem; gg::Symbol=:gg, ge::Symbol=:ge, eg::Symbol=:eg, ee::Symbol=:ee)::Float64\n",
+    "Calculate the ZZ coupling strength (ξ_zz) between two subsystems in a composite quantum system representing a two-cell unit of `fluxonium` qubits. The function extracts the relevant energy levels from the subsystems and computes the coupling strength based on the energy differences.\n",
+    "# Arguments\n",
+    "- `two_cell::CompositeQuantumSystem`: A composite quantum system representing a two-cell unit of `fluxonium` qubits, where each subsystem corresponds to a qubit.\n",
+    "- `gg::Symbol`: The symbol representing the ground state energy level (default: :gg).\n",
+    "- `ge::Symbol`: The symbol representing the first excited state energy level (default: :ge).\n",
+    "- `eg::Symbol`: The symbol representing the first excited state energy level of the second subsystem (default: :eg).\n",
+    "- `ee::Symbol`: The symbol representing the second excited state energy level (default: :ee).\n",
+    "# Returns\n",
+    "- `Float64`: The calculated ZZ coupling strength (ξ_zz) between the two subsystems.\n",
+    "\"\"\"\n",
+    "function ζ_zz(\n",
+    "    n_cell::CompositeQuantumSystem;\n",
+    "    gg::Symbol=:gg,\n",
+    "    ge::Symbol=:ge,\n",
+    "    eg::Symbol=:eg,\n",
+    "    ee::Symbol=:ee,\n",
+    ")::Float64\n",
+    "    E_ge, E_eg, E_ee = energy.(Ref(n_cell), [ge, eg, ee]) .- energy(n_cell, gg)\n",
+    "    return real(E_ee - (E_ge + E_eg))\n",
+    "end\n",
+    "\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f4495176",
+   "metadata": {},
+   "source": [
+    "## 2-Cell"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "e54ad2b1-274e-41dc-a2ee-e2b86e9c633d",
+   "metadata": {},
+   "outputs": [
+    {
+     "data": {
+      "text/plain": [
+       "CompositeQuantumSystem{@NamedTuple{H::QuantumObject{Operator, Dimensions{TensorSpace{2, Tuple{Space, Space}}, TensorSpace{2, Tuple{Space, Space}}}, Matrix{ComplexF64}}}, @NamedTuple{flA::SimpleQuantumSystem{@NamedTuple{φ::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}, n::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}, H::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}}, @NamedTuple{EC::Float64, EL::Float64, EJ::Float64}}, flB::SimpleQuantumSystem{@NamedTuple{φ::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}, n::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}, H::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}}, @NamedTuple{EC::Float64, EL::Float64, EJ::Float64}}}, @NamedTuple{flA::@NamedTuple{EC::Float64, EL::Float64, EJ::Float64}, flB::@NamedTuple{EC::Float64, EL::Float64, EJ::Float64}}}((flA = SimpleQuantumSystem{@NamedTuple{φ::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}, n::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}, H::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}}, @NamedTuple{EC::Float64, EL::Float64, EJ::Float64}}((φ = \n",
+       "Quantum Object:   type=Operator()   dims=([40], [40])   size=(40, 40)   ishermitian=false\n",
+       "40×40 Matrix{ComplexF64}:\n",
+       "    -3.14159+0.0im      2.59324+0.0im  …    3.56818e-5+0.0im\n",
+       "     2.59324+0.0im     -3.14159+0.0im      -2.43034e-5+0.0im\n",
+       " -3.16467e-7+0.0im     0.895276+0.0im      0.000116281+0.0im\n",
+       "    0.668003+0.0im   3.48555e-7+0.0im     -0.000155997+0.0im\n",
+       " -1.53389e-8+0.0im    -0.189446+0.0im      -5.94026e-5+0.0im\n",
+       "  -0.0300856+0.0im   1.74424e-7+0.0im  …  -0.000164779+0.0im\n",
+       "  -3.3859e-8+0.0im   -0.0144796+0.0im      -0.00147172+0.0im\n",
+       "  -0.0127032+0.0im  -4.82476e-7+0.0im       0.00206752+0.0im\n",
+       " -2.18671e-7+0.0im   0.00414181+0.0im     -0.000620215+0.0im\n",
+       "  -0.0010438+0.0im  -3.07128e-7+0.0im       0.00423944+0.0im\n",
+       "            ⋮                          ⋱  \n",
+       "  2.89431e-5+0.0im  -2.02267e-5+0.0im         0.167227+0.0im\n",
+       " -1.48011e-5+0.0im    1.0753e-5+0.0im        -0.169216+0.0im\n",
+       "  8.97493e-6+0.0im  -6.85817e-6+0.0im         0.199689+0.0im\n",
+       " -1.99993e-5+0.0im   1.47374e-5+0.0im        -0.257284+0.0im\n",
+       " -4.53346e-5+0.0im   3.23335e-5+0.0im  …     -0.210715+0.0im\n",
+       " -2.64136e-5+0.0im   1.85131e-5+0.0im        0.0205915+0.0im\n",
+       "  1.40781e-5+0.0im  -1.01389e-5+0.0im         0.262743+0.0im\n",
+       " -4.12553e-5+0.0im     2.861e-5+0.0im         0.926682+0.0im\n",
+       "  3.56818e-5+0.0im  -2.43034e-5+0.0im          13.0394+0.0im, n = \n",
+       "Quantum Object:   type=Operator()   dims=([40], [40])   size=(40, 40)   ishermitian=false\n",
+       "40×40 Matrix{ComplexF64}:\n",
+       " 0.0+0.0im         0.0-0.0384415im   0.0+2.35723e-7im  …  0.0+1.62263e-5im\n",
+       " 0.0+0.0384415im   0.0+0.0im         0.0-0.614942im       0.0-8.51356e-6im\n",
+       " 0.0-2.35723e-7im  0.0+0.614942im    0.0+0.0im            0.0+4.38755e-5im\n",
+       " 0.0+0.596173im    0.0+2.54857e-7im  0.0+0.401101im       0.0-4.86515e-5im\n",
+       " 0.0+1.4325e-8im   0.0-0.256585im    0.0+4.52723e-9im     0.0-2.74658e-6im\n",
+       " 0.0-0.0539117im   0.0+3.64944e-7im  0.0-0.474179im    …  0.0-5.91372e-5im\n",
+       " 0.0+5.11571e-8im  0.0-0.0325377im   0.0+2.50189e-7im     0.0-0.000575368im\n",
+       " 0.0-0.034612im    0.0-6.94659e-7im  0.0-0.0400763im      0.0+0.000667638im\n",
+       " 0.0-8.02346e-7im  0.0+0.013059im    0.0-1.74191e-6im     0.0-0.000392187im\n",
+       " 0.0-0.00371519im  0.0-3.88674e-7im  0.0+0.0195899im      0.0+0.00139308im\n",
+       "    ⋮                                                  ⋱  \n",
+       " 0.0-2.90938e-5im  0.0+2.55876e-5im  0.0-7.95922e-5im     0.0+0.245407im\n",
+       " 0.0+1.66435e-5im  0.0-1.29501e-5im  0.0+3.99064e-5im     0.0-0.10307im\n",
+       " 0.0-1.11881e-5im  0.0+7.80138e-6im  0.0-2.5775e-5im      0.0+0.0388177im\n",
+       " 0.0+1.99577e-5im  0.0-1.0242e-5im   0.0+3.9793e-5im      0.0-0.213817im\n",
+       " 0.0+3.69529e-5im  0.0-1.67872e-5im  0.0+7.30097e-5im  …  0.0-0.681327im\n",
+       " 0.0+1.83193e-5im  0.0-8.09816e-6im  0.0+3.93146e-5im     0.0-0.56877im\n",
+       " 0.0-1.09631e-5im  0.0+4.75776e-6im  0.0-2.60698e-5im     0.0+0.161492im\n",
+       " 0.0+2.24965e-5im  0.0-1.08314e-5im  0.0+5.75607e-5im     0.0-1.58249im\n",
+       " 0.0-1.62263e-5im  0.0+8.51356e-6im  0.0-4.38755e-5im     0.0+0.0im, H = \n",
+       "Quantum Object:   type=Operator()   dims=([40], [40])   size=(40, 40)   ishermitian=true\n",
+       "40×40 Matrix{ComplexF64}:\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.11859+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im  5.61358+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       "    ⋮                                     ⋱                 \n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im     137.561+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im      0.0+0.0im      0.0+0.0im         0.0+0.0im  145.038+0.0im), (EC = 1.0, EL = 1.0, EJ = 7.0), :flA), flB = SimpleQuantumSystem{@NamedTuple{φ::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}, n::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}, H::QuantumObject{Operator, Dimensions{Space, Space}, Matrix{ComplexF64}}}, @NamedTuple{EC::Float64, EL::Float64, EJ::Float64}}((φ = \n",
+       "Quantum Object:   type=Operator()   dims=([40], [40])   size=(40, 40)   ishermitian=false\n",
+       "40×40 Matrix{ComplexF64}:\n",
+       "    -3.14159+0.0im      2.64885+0.0im  …    9.57766e-6+0.0im\n",
+       "     2.64885+0.0im      -3.1416+0.0im       1.07693e-5+0.0im\n",
+       "  1.76137e-7+0.0im     0.877887+0.0im      0.000141507+0.0im\n",
+       "    0.682282+0.0im  -1.54632e-7+0.0im     -0.000244834+0.0im\n",
+       " -5.72825e-7+0.0im    -0.182991+0.0im     -0.000346027+0.0im\n",
+       "  -0.0288342+0.0im  -1.62972e-7+0.0im  …   0.000536486+0.0im\n",
+       " -2.11615e-7+0.0im    -0.016722+0.0im      -0.00100453+0.0im\n",
+       "  -0.0140118+0.0im  -8.07015e-7+0.0im       0.00315593+0.0im\n",
+       " -8.69483e-7+0.0im  -0.00415685+0.0im      -0.00249406+0.0im\n",
+       "  0.00156145+0.0im   2.15809e-7+0.0im     -0.000200373+0.0im\n",
+       "            ⋮                          ⋱  \n",
+       "  1.24782e-5+0.0im   7.69929e-6+0.0im         0.184639+0.0im\n",
+       " -5.92002e-6+0.0im  -3.03803e-6+0.0im        -0.155621+0.0im\n",
+       "  3.61032e-6+0.0im   7.61861e-7+0.0im          0.17492+0.0im\n",
+       " -5.33568e-6+0.0im  -2.94978e-6+0.0im        -0.222907+0.0im\n",
+       "  1.38934e-5+0.0im   1.32971e-5+0.0im  …      0.198943+0.0im\n",
+       " -7.62428e-6+0.0im  -7.96671e-6+0.0im      -0.00538449+0.0im\n",
+       "   3.6836e-6+0.0im   2.52177e-6+0.0im          0.35103+0.0im\n",
+       "  1.38344e-5+0.0im   1.43497e-5+0.0im        -0.718422+0.0im\n",
+       "  9.57766e-6+0.0im   1.07693e-5+0.0im          13.6015+0.0im, n = \n",
+       "Quantum Object:   type=Operator()   dims=([40], [40])   size=(40, 40)   ishermitian=false\n",
+       "40×40 Matrix{ComplexF64}:\n",
+       " 0.0+0.0im         0.0-0.0326419im   0.0-1.02268e-7im   …  0.0+8.95504e-6im\n",
+       " 0.0+0.0326419im   0.0+0.0im         0.0-0.615862im        0.0+3.4531e-6im\n",
+       " 0.0+1.02268e-7im  0.0+0.615862im    0.0+0.0im             0.0+5.65854e-5im\n",
+       " 0.0+0.603179im    0.0-2.39715e-7im  0.0+0.369799im        0.0-8.42523e-5im\n",
+       " 0.0-7.11495e-7im  0.0-0.246561im    0.0+4.53969e-7im      0.0-0.00010007im\n",
+       " 0.0-0.0508508im   0.0-1.28676e-7im  0.0-0.497657im     …  0.0+0.000185782im\n",
+       " 0.0-3.23119e-7im  0.0-0.036902im    0.0-4.04304e-6im      0.0-0.000441272im\n",
+       " 0.0-0.0372854im   0.0-9.73809e-7im  0.0-0.0451274im       0.0+0.0010655im\n",
+       " 0.0-2.20805e-6im  0.0-0.0127248im   0.0-2.78152e-6im      0.0-0.000624965im\n",
+       " 0.0+0.00531771im  0.0+5.51202e-7im  0.0-0.0189255im       0.0-0.000111053im\n",
+       "    ⋮                                                   ⋱  \n",
+       " 0.0+4.14642e-6im  0.0-5.36259e-6im  0.0-0.000112936im     0.0+0.239814im\n",
+       " 0.0+1.08738e-6im  0.0+2.18245e-6im  0.0+5.07987e-5im      0.0-0.0938659im\n",
+       " 0.0-2.53967e-7im  0.0-2.67679e-6im  0.0-2.68567e-5im      0.0+0.0385763im\n",
+       " 0.0+8.53031e-6im  0.0+3.106e-6im    0.0+4.31204e-5im      0.0-0.131548im\n",
+       " 0.0-3.07259e-5im  0.0-4.15368e-6im  0.0-0.000116349im  …  0.0+0.584264im\n",
+       " 0.0+1.56058e-5im  0.0+2.51465e-6im  0.0+6.24338e-5im      0.0-0.466424im\n",
+       " 0.0-6.81449e-6im  0.0-3.01839e-6im  0.0-3.28356e-5im      0.0-0.0825557im\n",
+       " 0.0-1.72143e-5im  0.0-5.64283e-6im  0.0-9.17927e-5im      0.0+1.46186im\n",
+       " 0.0-8.95504e-6im  0.0-3.4531e-6im   0.0-5.65854e-5im      0.0+0.0im, H = \n",
+       "Quantum Object:   type=Operator()   dims=([40], [40])   size=(40, 40)   ishermitian=true\n",
+       "40×40 Matrix{ComplexF64}:\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0985845+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im  5.71081+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       "    ⋮                                       ⋱                 \n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im     128.382+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im        0.0+0.0im      0.0+0.0im         0.0+0.0im  137.817+0.0im), (EC = 1.0, EL = 0.89, EJ = 7.0), :flB)), (H = \n",
+       "Quantum Object:   type=Operator()   dims=([40, 40], [40, 40])   size=(1600, 1600)   ishermitian=true\n",
+       "1600×1600 Matrix{ComplexF64}:\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       "    ⋮                                        ⋱                 \n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im  …      0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im     18620.2+0.0im      0.0+0.0im\n",
+       " 0.0+0.0im  0.0+0.0im  0.0+0.0im  0.0+0.0im         0.0+0.0im  19988.7+0.0im,), (flA = (EC = 1.0, EL = 1.0, EJ = 7.0), flB = (EC = 1.0, EL = 0.89, EJ = 7.0)), nothing, nothing, :flA_flB)"
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "flA_params = (;EJ = 7.0, EC=1.0, EL=1.0, δϕ=0.0, n_g=0.0)\n",
+    "flB_params = (;EJ = 7.0, EC=1.0, EL=0.89, δϕ=0.0, n_g=0.0)\n",
+    "two_cell_params = (flA=flA_params, flB=flB_params)\n",
+    "two_cell = ncell(two_cell_params)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "2fe6817c",
+   "metadata": {},
+   "source": [
+    "## First Sweep, Check $\\zeta_{zz}$ cancellation in nearly degenerate 2-cell\n",
+    "\n",
+    "Using the two-cell defined in the previous code block, we would like to sweep over possible inductive and capacitive couplings to see if we can find a region with negligible ZZ coupling.\n",
+    "\n",
+    "The inductive coupling strength to be swept will be 4 and 200 MHz.\n",
+    "The capacitive coupling strength to be swept will be between 1 and 100 MHz\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "332fa7d4",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stderr",
+     "output_type": "stream",
+     "text": [
+      "\u001b[32mProgress:   0%|▏                          |  ETA: 9:52:27 ( 3.57  s/it)\u001b[39m\u001b[KK"
+     ]
+    }
+   ],
+   "source": [
+    "# inductive and capacitive coupling strengths in units of GHz [ħ=1]\n",
+    "g_ind_rng = range(1.0, 300.0, length=100) * 2π * 1e-3\n",
+    "g_cap_rng = range(1.0, 100.0, length=100) * 2π * 1e-3\n",
+    "p = Progress(length(g_ind_rng)*length(g_cap_rng), showspeed=true)\n",
+    "ζ_zz_mtrx = Matrix{Float64}(undef, length(g_ind_rng), length(g_cap_rng))\n",
+    "g_mtrx = Array{Float64,3}(undef, length(g_ind_rng), length(g_cap_rng), 2)\n",
+    "\n",
+    "for (i, g_ind) in enumerate(g_ind_rng), (j, g_cap) in enumerate(g_cap_rng)\n",
+    "    two_cell_coupled = two_cell + (g_cap*two_cell[:flA, :n, :flB, :n] + g_ind * two_cell[:flA, :φ, :flB, :φ]) |> \n",
+    "        x -> to_energy_basis(x; set_energy_zero=true, etol=1e-9)\n",
+    "    ζ_zz_mtrx[i, j] = ζ_zz(two_cell_coupled)\n",
+    "    g_mtrx[i, j, :] = [g_ind, g_cap]\n",
+    "    next!(p)\n",
+    "end\n",
+    "finish!(p)\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "3fbdcfef",
+   "metadata": {},
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Julia 1.12.5",
+   "language": "julia",
+   "name": "julia-1.12"
+  },
+  "language_info": {
+   "file_extension": ".jl",
+   "mimetype": "application/julia",
+   "name": "julia",
+   "version": "1.12.5"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
