@@ -30,3 +30,5 @@ JuliaLocalPreferences.toml
 # Jupyter/marimo notebook checkpoint and scratch directories
 .ipynb_checkpoints/
 .virtual_documents/
+
+log/
