@@ -141,4 +141,56 @@
         @test state(A, :e; bare_to_dressed_tracking=:spectrum) == state(A, :e)
         @test_throws ArgumentError state(A, :e; bare_to_dressed_tracking=:bogus)
     end
+    # -------------------------------------------------
+    # Floquet states labelled by static eigenstates
+    # -------------------------------------------------
+    @testset "state with FloquetBasis" begin
+        AB0 = A ⊗ B
+        ABc = AB0 + 0.05 * AB0[:A, :φ] * AB0[:B, :φ]
+        ω = 1.0
+        T = 2π / ω
+        lbls = (:gg, :ge, :eg, :ee)
+
+        # zero drive: Floquet states are the static eigenstates
+        fb0 = FloquetBasis(ABc.H, [((p, t) -> 0.0, ABc[:A, :φ])], T; progress_bar=Val(false))
+        for tracking in (:spectrum, :overlap), lbl in lbls
+            λ, ψ = state(ABc, lbl; bare_to_dressed_tracking=tracking)
+            ε, ψfl = state(ABc, fb0, lbl; bare_to_dressed_tracking=tracking)
+            @test ε ≈ real(λ) atol=1e-8
+            @test abs(ψ' * ψfl) ≈ 1.0 atol=1e-8
+        end
+
+        # weak off-resonant drive
+        fb = FloquetBasis(ABc.H, [((p, t) -> 0.05 * cos(ω * t), ABc[:A, :φ])], T; progress_bar=Val(false))
+        for lbl in lbls
+            idx = state_idx(ABc, lbl)
+            λ, ψ = state(ABc, lbl)
+            ε, ψfl = state(ABc, fb, lbl)
+            @test abs2(ψ' * ψfl) > 0.99
+            @test abs(ε - real(λ)) < ω / 2
+            @test energy(ABc, fb, lbl) == ε
+            t = 0.3T
+            @test state(ABc, fb, lbl, t)[2] ≈ states(fb, t)[idx] atol=1e-6
+            # Floquet states acquire only a quasienergy phase over a period
+            @test state(ABc, fb, lbl, T)[2] ≈ exp(-1im * ε * T) * ψfl atol=1e-6
+        end
+        # integer and symbol labels agree
+        @test state(ABc, fb, state_idx(ABc, :ee) - 1) == state(ABc, fb, :ee)
+
+        # caching stores the micromotion propagator without changing the result
+        fbc = FloquetBasis(ABc.H, [((p, t) -> 0.05 * cos(ω * t), ABc[:A, :φ])], T; progress_bar=Val(false))
+        @test state(ABc, fbc, :ge, 0.3T; cache=true)[2] ≈ state(ABc, fb, :ge, 0.3T)[2] atol=1e-8
+
+        # untracked basis is ordered by folded quasienergy, and is flagged
+        fb_untracked = FloquetBasis(ABc.H + QobjEvo((ABc[:A, :φ], (p, t) -> 0.05 * cos(ω * t))), T; progress_bar=Val(false))
+        @test_logs (:warn,) match_mode=:any begin
+            for lbl in lbls
+                state(ABc, fb_untracked, lbl)
+            end
+        end
+        @test_nowarn state(ABc, fb_untracked, :ge; min_overlap=nothing)
+
+        # mismatched dimensions
+        @test_throws ArgumentError state(A, fb, :g)
+    end
 end

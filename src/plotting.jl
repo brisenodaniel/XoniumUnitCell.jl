@@ -27,6 +27,9 @@ function zz_heatmap_figure(
     )
 
     # --- Log-scaled heatmap ---
+    # a constant Z has an empty colour range, which Makie cannot draw on a log scale
+    zmin, zmax = extrema(Z)
+    zmax > zmin || (zmax = 10 * zmin)
     hm = heatmap!(
         ax,
         x,
@@ -34,6 +37,7 @@ function zz_heatmap_figure(
         Z;
         colormap = colormap,
         colorscale = log10,
+        colorrange = (zmin, zmax),
     )
 
     # --- Colorbar ---
