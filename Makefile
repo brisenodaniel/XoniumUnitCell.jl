@@ -13,12 +13,15 @@ THREADS     ?= $(shell $(SETTINGS_JL) get threads)
 # Kernel display name; the installed spec is "<lowercased name>-<julia version>".
 KERNEL_NAME ?= $(shell $(SETTINGS_JL) get kernel_name)
 NTHREADS     = $(shell $(SETTINGS_JL) resolve $(THREADS))
+# `make setup`: 1 = also install ProjectRoot in the base Julia environment,
+# 0 = leave the base environment alone and only check that ProjectRoot is there.
+GET_PROJECTROOT ?= 0
 
-.PHONY: help setup projectroot deps kernel kernel-remove session test
+.PHONY: help setup projectroot check-projectroot deps kernel kernel-remove session test
 
 help:
 	@echo "Targets:"
-	@echo "  make setup         projectroot + deps + kernel"
+	@echo "  make setup         kernel + deps; needs ProjectRoot in the base env (GET_PROJECTROOT=1 installs it)"
 	@echo "  make projectroot   install ProjectRoot in the base Julia environment"
 	@echo "  make deps          instantiate and precompile this project's packages"
 	@echo "  make kernel        install the Jupyter kernel and save THREADS/KERNEL_NAME to $(SETTINGS)"
@@ -29,16 +32,32 @@ help:
 	@echo "Variables (defaults from $(SETTINGS)):"
 	@echo "  THREADS=$(THREADS)        integer, or 'auto' = Sys.CPU_THREADS"
 	@echo "  KERNEL_NAME=$(KERNEL_NAME)"
+	@echo "  GET_PROJECTROOT=$(GET_PROJECTROOT)        1 = 'make setup' also runs 'make projectroot'"
 	@echo "  JULIA=$(JULIA)"
 	@echo "Example: make kernel THREADS=8 KERNEL_NAME=MySims"
 
-setup: projectroot deps kernel
+# Runs `make kernel` then `make deps` (in that order, even under `make -j`).
+# The base environment is only modified when GET_PROJECTROOT=1; otherwise a
+# missing ProjectRoot is an error. The check runs first, before anything is installed.
+setup:
+ifeq ($(GET_PROJECTROOT),1)
+	$(MAKE) projectroot
+else ifeq ($(GET_PROJECTROOT),0)
+	$(MAKE) check-projectroot
+else
+	$(error GET_PROJECTROOT must be 0 or 1, got "$(GET_PROJECTROOT)")
+endif
+	$(MAKE) kernel
+	$(MAKE) deps
 
 $(SETTINGS):
 	$(SETTINGS_JL) init
 
 projectroot:
 	$(JULIA) -e 'using Pkg; haskey(Pkg.project().dependencies, "ProjectRoot") ? @info("ProjectRoot already installed") : Pkg.add("ProjectRoot")'
+
+check-projectroot:
+	@$(JULIA) -e 'using Pkg; haskey(Pkg.project().dependencies, "ProjectRoot") || (println(stderr, "ERROR: ProjectRoot is not installed in the base Julia environment. Run `make projectroot`, or use `make setup GET_PROJECTROOT=1`."); exit(1))'
 
 deps:
 	$(JULIA) --project=. -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'

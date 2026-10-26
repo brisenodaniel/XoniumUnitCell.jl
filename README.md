@@ -17,13 +17,13 @@ All notebooks live in `notebooks/` and use the Jupyter kernel **QuantumSims** (s
 
 `output/` contains static HTML exports of `2Q`, `parametric_CZ` and `xonium_heavy_light`, so you can read the results without running anything.
 
-`src/` holds the reusable code that the notebooks are being migrated onto: circuit Hamiltonians (`circuits.jl`), gate and sweep utilities (`gate_utils.jl`), pulse envelopes (`pulses.jl`), noise and dephasing (`env_psd.jl`, `dephasing.jl`), and plotting (`plotting.jl`).
+`src/` holds the reusable code that the notebooks are being migrated onto (see [API.md](API.md) for its reference): circuit Hamiltonians (`circuits.jl`), gate and sweep utilities (`gate_utils.jl`), pulse envelopes (`pulses.jl`), noise and dephasing (`env_psd.jl`, `dephasing.jl`), and plotting (`plotting.jl`).
 
 ## Prerequisites
 
 1. **Julia 1.12 or newer** (the kernel is named for the version you install with). The easiest way to install it is [juliaup](https://github.com/JuliaLang/juliaup).
 2. **Git**, because two dependencies (`QuantumToolbox` and `QuantumSystems`) are fetched from forks on GitHub via the `[sources]` section of `Project.toml`.
-3. **`ProjectRoot` installed in the base (global) Julia environment.** Every notebook runs `using ProjectRoot` *before* activating the project, so it has to be resolvable from the default environment. `make projectroot` does this for you.
+3. **`ProjectRoot` installed in the base (global) Julia environment.** Every notebook runs `using ProjectRoot` *before* activating the project, so it has to be resolvable from the default environment. `make setup GET_PROJECTROOT=1` (or `make projectroot`) installs it for you; plain `make setup` only checks for it.
 4. **make** (standard on Linux and macOS; on Windows use WSL, or run the Julia commands in the `Makefile` by hand).
 5. **Jupyter** (JupyterLab, or VS Code with the Jupyter and Julia extensions) to open the notebooks. Installing the kernel only needs `IJulia`, which is a project dependency. It does not need Jupyter itself.
 
@@ -32,19 +32,25 @@ All notebooks live in `notebooks/` and use the Jupyter kernel **QuantumSims** (s
 Clone the repository and run, from its root:
 
 ```bash
-make setup
+make setup                      # ProjectRoot must already be in the base Julia environment
+make setup GET_PROJECTROOT=1    # also install ProjectRoot there if it is missing
 ```
 
-This runs the three steps below in order. Each can also be run on its own (`make help` lists them):
+`make setup` runs `make kernel` and then `make deps`. By default (`GET_PROJECTROOT=0`) it leaves your base Julia environment alone: it checks that `ProjectRoot` is installed and stops with an error, before installing anything or saving any settings, if it is not. With `GET_PROJECTROOT=1` it runs `make projectroot` first. `THREADS` and `KERNEL_NAME` are passed on to `make kernel`, e.g. `make setup THREADS=8 KERNEL_NAME=MySims`.
 
-| Command | What it does |
-|---|---|
-| `make projectroot` | Installs `ProjectRoot` in the base environment if it is missing. |
-| `make deps` | Instantiates and precompiles this project's packages. The first run downloads and precompiles a lot, so it can take several minutes. |
-| `make kernel` | Installs the Jupyter kernel **QuantumSims** (shown as `QuantumSims 1.12` on Julia 1.12) with `--project=@.`, so it uses the project wherever the repository is cloned. Thread count and name come from `julia_settings.TOML`. |
-| `make kernel-remove` | Removes the kernel named by `KERNEL_NAME`. |
-| `make session` | Starts a Julia REPL on this project with the thread count from `julia_settings.TOML`. |
-| `make test` | Runs the test suite. |
+Each step can also be run on its own (`make help` lists them):
+
+| Command | What it does | Arguments (default) |
+|---|---|---|
+| `make setup` | Runs `make kernel` then `make deps`, after checking for `ProjectRoot` (or installing it, see `GET_PROJECTROOT`). | `GET_PROJECTROOT` (`0`; `0` or `1`), plus `THREADS` and `KERNEL_NAME` as for `make kernel` |
+| `make projectroot` | Installs `ProjectRoot` in the base environment if it is missing. | none |
+| `make deps` | Instantiates and precompiles this project's packages. The first run downloads and precompiles a lot, so it can take several minutes. | none |
+| `make kernel` | Installs the Jupyter kernel **QuantumSims** (shown as `QuantumSims 1.12` on Julia 1.12) with `--project=@.`, so it uses the project wherever the repository is cloned. Values given on the command line are saved to `julia_settings.TOML`. | `THREADS` (`threads` in `julia_settings.TOML`, initially `auto`), `KERNEL_NAME` (`kernel_name` in `julia_settings.TOML`, initially `QuantumSims`) |
+| `make kernel-remove` | Removes the kernel named by `KERNEL_NAME`. | `KERNEL_NAME` (as for `make kernel`) |
+| `make session` | Starts a Julia REPL on this project. | `THREADS` (as for `make kernel`; for this session only, not saved) |
+| `make test` | Runs the test suite. | none |
+
+All commands also accept `JULIA` (`julia`), the Julia executable to use, and `SETTINGS` (`julia_settings.TOML`), the settings file.
 
 ### Threads and kernel name
 
@@ -105,7 +111,7 @@ using LinearAlgebra
 LinearAlgebra.BLAS.set_num_threads(1)
 ```
 
-`using XoniumUnitCell` works once you run with `--project=.`. If your script also uses `ProjectRoot`, as the notebooks do, it must be installed in the base environment (`make projectroot`).
+`using XoniumUnitCell` works once you run with `--project=.`. If your script also uses `ProjectRoot`, as the notebooks do, it must be installed in the base environment (`make projectroot`, or `make setup GET_PROJECTROOT=1`).
 
 To get a REPL that runs on the installed **kernel** itself, which needs Jupyter's console frontend, run:
 
