@@ -32,3 +32,6 @@ JuliaLocalPreferences.toml
 .virtual_documents/
 
 log/
+
+# Per-machine defaults written by `make kernel`
+julia_settings.TOML
