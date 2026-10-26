@@ -11,7 +11,7 @@ equals the default `kT` of [`S_pink_noise`](@ref).
 thermal_energy(T::Real) = 2π * 1.38e-23 * T / 6.63e-34 * 1e-9
 
 """
-    qubit_pink_noise(params; kT=thermal_energy(1.5e-3), qho_basis_nlev=50, ebasis_nlev=6, bare_to_dressed_tracking=:spectrum, kwargs...)
+    qubit_pink_noise(params; kT=thermal_energy(1.5e-3), qho_basis_nlev=50, ebasis_nlev=6, bare_to_dressed_tracking=:overlap, kwargs...)
 
 [`PinkNoise`](@ref) of a single fluxonium with `fluxonium` parameters `params` (including its flux offset `δϕ`, π
 at the sweet spot), built from its inductive and charging energies and the flux matrix element `φ_ge = ⟨g|φ|e⟩`.
@@ -23,7 +23,7 @@ function qubit_pink_noise(
     kT::Real=thermal_energy(1.5e-3),
     qho_basis_nlev::Int=50,
     ebasis_nlev::Int=6,
-    bare_to_dressed_tracking::Symbol=:spectrum,
+    bare_to_dressed_tracking::Symbol=:overlap,
     kwargs...
     )
     qubit = fluxonium(; params..., nlev=qho_basis_nlev) |>

@@ -90,7 +90,7 @@ end
 function get_qubit_subspace_couplings(
     sys::CompositeQuantumSystem,
     H_int::QuantumObject;
-    bare_to_dressed_tracking::Symbol=:spectrum
+    bare_to_dressed_tracking::Symbol=:overlap
     )
     σA, σB = map(sys.subsys) do subsys
         g, e = [state(subsys, lbl; bare_to_dressed_tracking=bare_to_dressed_tracking)[2] for lbl in (:g, :e)]
@@ -171,7 +171,7 @@ function sweep_couplings(
     J::Real;
     qho_basis_nlev::Int=50,
     ebasis_nlev::Int=6,
-    bare_to_dressed_tracking::Symbol=:spectrum,
+    bare_to_dressed_tracking::Symbol=:overlap,
     ) where {Hfnc<:Function}
     # shift the flux offset δϕ of both fluxonia by the same amount; `fluxonium`'s default offset is π
     base_params = map(p -> (; p..., δϕ=get(p, :δϕ, π)), (fA_params, fB_params))
@@ -186,7 +186,7 @@ function sweep_couplings(
 end
 
 """
-    run_spectography_circuit(sys, H_dr, tlist; dr_params=nothing, integrator_pbar=false, state_tracking=:spectrum, fA_lbl=:fA, sesolve_kwargs...)
+    run_spectography_circuit(sys, H_dr, tlist; dr_params=nothing, integrator_pbar=false, state_tracking=:overlap, fA_lbl=:fA, sesolve_kwargs...)
 
 Evolve the symmetric superposition (|gg⟩+|ge⟩)/√2 of the dressed states of `sys` under `sys.H + H_dr`
 and return the population that has been transferred to qubit A's excited state, |⟨eg|ψ⟩|² + |⟨ee|ψ⟩|²,
@@ -200,7 +200,7 @@ the full propagator, since only P(t_end) for a single initial state is needed.
 - `dr_params`: parameters `p` handed to the coefficient functions of `H_dr`.
 - `integrator_pbar`: forwarded to `sesolve`. Leave it `false` when calling from a sweep that has its own
         progress bar, otherwise the per-call bars dominate the output.
-- `state_tracking`: `:spectrum` or `:overlap`, see `state`.
+- `state_tracking`: `:overlap` (default) or `:spectrum`, see `state`.
 - `fA_lbl`: label of the driven subsystem (currently unused, kept for API symmetry with the other helpers).
 - `sesolve_kwargs`: forwarded to `sesolve`, e.g. `abstol`, `reltol`.
 """
@@ -210,7 +210,7 @@ function run_spectography_circuit(
     tlist::AbstractArray;
     dr_params::Union{PP, Nothing} = nothing,
     integrator_pbar::Bool=false,
-    state_tracking::Symbol=:spectrum,
+    state_tracking::Symbol=:overlap,
     fA_lbl::Symbol=:fA,
     sesolve_kwargs...
     ) where {PP}
@@ -230,7 +230,7 @@ end
 """
     run_spectography_flux_sweep_2a(fA_params, fB_params, tlist, env, δϕB_list, ω_list, J, Ω_ge;
         H_builder=first ∘ build_H_S1, H_builder_kwargs=nothing, dr_params=nothing, δϕA=-2π*0.042,
-        integrator_pbar=false, showprogress=true, state_tracking=:spectrum, sesolve_kwargs...)
+        integrator_pbar=false, showprogress=true, state_tracking=:overlap, sesolve_kwargs...)
 
 Spectroscopy sweep of Fig. 2(a): drive qubit A's g↔e transition with `Ω_ge * n_A * env(p, t) * cos(ω t)`
 and record the population transferred out of (|gg⟩+|ge⟩)/√2 (see [`run_spectography_circuit`](@ref)) on a
@@ -278,7 +278,7 @@ function run_spectography_flux_sweep_2a(
     δϕA::Real=-2π * 0.042,
     integrator_pbar::Bool=false,
     showprogress::Bool=true,
-    state_tracking::Symbol=:spectrum,
+    state_tracking::Symbol=:overlap,
     sesolve_kwargs...
         ) where {ENVFNC<:Function, HFUNC<:Function, PP, HPP}
     fA_lbl = fA_params[:name]

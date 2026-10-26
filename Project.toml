@@ -13,14 +13,17 @@ Memoize = "c03570c3-d221-55d1-a50c-7939bbd78826"
 Peaks = "18e31ff7-3703-566c-8e60-38913d67486b"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
 ProjectRoot = "e3f974f6-674d-4b8e-a3d1-5850677db852"
+QuantumSystems = "5d0b6a5c-2c53-4c47-9b5e-7a1f3f0a9e21"
 QuantumToolbox = "6c2fb7c5-b903-41d2-bc5e-5a7c320b9fab"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 SciMLSensitivity = "1ed8b502-d754-442c-8d5d-10ac956f44a1"
 StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
+Symbolics = "0c5d862f-8b57-4792-8d23-62f2024744c7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [sources]
+QuantumSystems = {rev = "main", url = "https://github.com/brisenodaniel/QuantumSystems.jl.git"}
 QuantumToolbox = {rev = "main", url = "https://github.com/brisenodaniel/QuantumToolbox.jl.git"}
 
 [compat]
@@ -29,4 +32,5 @@ Peaks = "0.6.2"
 QuantumToolbox = "0.40.0"
 Revise = "3.14.5"
 StructArrays = "0.7.3"
+Symbolics = "7.39.0"
 Test = "1.11.0"
